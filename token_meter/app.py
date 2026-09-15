@@ -7531,21 +7531,25 @@ def builder_recap_state(range_key):
     git_state = git_delivery_state("", normalized_range)
     git_days = None
     previous_git_lines = None
+    previous_git_commits = None
     if isinstance(git_state, dict) and git_state.get("ok"):
         git_days = []
+        daily_maximum = ((1 << 53) - 1) // max(VALID_RECAP_RANGES)
         for git_day in git_state.get("days") or ():
             if not isinstance(git_day, dict):
                 continue
             availability = git_day.get("availability") or {}
             changed_lines = _builder_recap_line_count(
-                git_day.get("changed_lines"),
-                ((1 << 53) - 1) // max(VALID_RECAP_RANGES),
+                git_day.get("changed_lines"), daily_maximum,
             )
             git_days.append({
                 "day": git_day.get("day"),
                 "available": bool(availability.get("code_pushed")),
                 "active": bool(changed_lines),
                 "changed_lines": changed_lines,
+                "commits": _builder_recap_line_count(
+                    git_day.get("commits"), daily_maximum,
+                ),
             })
         previous_git = git_state.get("previous") or {}
         previous_availability = previous_git.get("availability") or {}
@@ -7553,11 +7557,15 @@ def builder_recap_state(range_key):
             previous_git_lines = _builder_recap_line_count(
                 previous_git.get("changed_lines")
             )
+            previous_git_commits = _builder_recap_line_count(
+                previous_git.get("commits")
+            )
     try:
         payload = _domain_build_builder_recap(
             _xsess.get("internal_rows") or (), git_days, range_days,
             generated_at=cross.get("generated_at"),
             previous_git_lines=previous_git_lines,
+            previous_git_commits=previous_git_commits,
         )
     except ValueError:
         return {"ok": False, "error": "A valid recap range is required."}, 400
@@ -8464,6 +8472,66 @@ def agent_usage(window="7d", focus="changes"):
     return bounded_agent_result(result)
 
 
+# Token Meter already classifies each observed tool. Expose only the codes that
+# name a change the user can make, and re-word every reason from the numbers
+# here: the stored `reason` for `scope` embeds a local project path.
+AGENT_TOOL_RECOMMENDATIONS = {
+    "disable": "Advertised to the model in {sessions} sessions and never called.",
+    "fix_or_disable": "{errors} of {calls} calls returned an error.",
+    "narrow_results": "Returned about {output_tokens:,} tokens across {calls} calls.",
+    "reduce_repeats": "Repeated identical arguments in {repeat_calls} consecutive calls.",
+}
+
+
+def agent_flagged_tools(limit=5):
+    """Name tools Token Meter has already flagged, worded without any local path."""
+    rows = ((cross_session().get("tool_waste") or {}).get("inventory_tools") or [])
+    flagged = []
+    for row in rows:
+        recommendation = str(row.get("recommendation") or "")
+        template = AGENT_TOOL_RECOMMENDATIONS.get(recommendation)
+        if not template:
+            continue
+        namespace = str(row.get("namespace") or "")
+        name = str(row.get("name") or "")
+        if namespace == "tokenmeter" or name.startswith("mcp__tokenmeter__"):
+            continue
+        kind = "mcp" if row.get("kind") == "mcp" else "builtin"
+        # A runtime built-in (the agent's own shell, exec, or file tool) has no
+        # disable or output-configuration control. Narrowing it is not a change
+        # the user can make, so it is never an actionable lever regardless of
+        # volume. Say so inline so its size cannot be read as a recommendation.
+        actionable = kind == "mcp"
+        numbers = {
+            "calls": int(row.get("calls") or 0),
+            "errors": int(row.get("errors") or 0),
+            "output_tokens": int(row.get("output_tokens") or 0),
+            "repeat_calls": int(row.get("repeat_calls") or 0),
+            "sessions": int(row.get("advertised_sessions") or 0),
+        }
+        why = template.format(**numbers)
+        if not actionable:
+            why += " It is a runtime built-in, not a tool the user can disable, narrow, or reconfigure."
+        flagged.append({
+            "name": compact_text(row.get("display") or name or "Unknown", 80),
+            "kind": kind,
+            "runtime": str(row.get("runtime") or ""),
+            "recommendation": recommendation,
+            "user_can_disable": actionable,
+            "actionable": actionable,
+            "why": why,
+            "calls": numbers["calls"],
+            "output_tokens": numbers["output_tokens"],
+            "errors": numbers["errors"],
+        })
+    # An actionable MCP tool always outranks a runtime built-in, whatever the
+    # built-in's token volume, so the answer names a control the user can pull.
+    flagged.sort(key=lambda row: (
+        0 if row["actionable"] else 1, -row["output_tokens"], row["name"],
+    ))
+    return flagged[:max(0, int(limit))]
+
+
 def agent_capabilities(scope="current", limit=5, caller=None):
     scope = str(scope or "current").strip().lower()
     if scope not in ("current", "all"):
@@ -8537,6 +8605,7 @@ def agent_capabilities(scope="current", limit=5, caller=None):
         "candidates": candidates,
         "candidate_count": candidate_count,
         "candidates_returned": len(candidates),
+        "flagged_tools": agent_flagged_tools(limit=limit),
         "recommended_action": action,
         "caveat": ("Capability evidence names user-installed skill packs but never returns configuration values, "
                    "environment variables, credentials, tool arguments, or tool results."

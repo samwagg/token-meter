@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -118,8 +119,8 @@ global.fetch=(url,options={})=>{fetchCalls.push({url,options});if(!fetchQueue.le
 function response(payload,ok=true){return {ok,json:async()=>payload};}
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 const program=[
- 'var COACH_STATE=null,coachMessages=[],coachDraft=null,coachBusy=false,coachTurn=null,coachTurnSerial=0,coachPollTimer=0,coachStopTimer=0,coachVisualTimer=0,coachStatusNotice=null,coachStatusTimer=0;',
- extractConst('COACH_ACTIVITY_COPY'),extractConst('COACH_TOOL_COPY'),extractConst('COACH_PATIENCE_MS'),extractConst('COACH_RECOMMENDATIONS'),extractConst('COACH_WEEKDAYS'),extractConst('COACH_ROUTE_LABELS'),
+ 'var COACH_STATE=null,coachMessages=[],coachDraft=null,coachBusy=false,coachTurn=null,coachTurnSerial=0,coachPollTimer=0,coachStopTimer=0,coachVisualTimer=0,coachStatusNotice=null,coachStatusTimer=0,coachNarratedWeeklyAt;',
+ extractConst('COACH_ACTIONS'),extractConst('COACH_ACTIVITY_COPY'),extractConst('COACH_TOOL_COPY'),extractConst('COACH_PATIENCE_MS'),extractConst('COACH_RECOMMENDATIONS'),extractConst('COACH_WEEKDAYS'),extractConst('COACH_ROUTE_LABELS'),
  __SETUP__,...__FUNCTIONS__.map(extract),__BODY__
 ].join('\n');
 eval(program);
@@ -148,8 +149,9 @@ eval(program);
             'id=coach-goal-sheet',
             'id=coach-context-label',
             'id=coach-stop',
+            "plan.direct?'coachAction direct':'coachAction'",
             'id=coach-input maxlength=2000',
-            "Sent messages and selected metrics are processed by Codex/OpenAI.",
+            "Messages and selected metrics go to Codex/OpenAI.",
             "Chat clears on refresh.",
         ):
             self.assertIn(marker, self.page)
@@ -170,11 +172,11 @@ eval(program);
             '<span class=coachTriggerName>Tok</span>',
             '<h2 id=coach-title>Tok</h2>',
             'aria-label="Close Tok"',
-            "<h3>Tok, Master of tokens</h3>",
-            "I read the signals, keep the caveats, and help you make one better move at a time.",
+            "<div class=coachEyebrow>Master of tokens</div>",
+            "Ask what to change. I answer from your local evidence and point at the control.",
             'aria-label="Message Tok"',
             "meta.textContent=role==='user'?'You':'Tok'",
-            "Tok will turn it into a measurable draft for you to approve.",
+            "Tok drafts it as something measurable for you to approve.",
         ):
             self.assertIn(marker, self.page)
 
@@ -271,7 +273,7 @@ const nodes={{'coach-messages':new Node(),'coach-stop':new Node(),'coach-send':n
 global.document={{createElement:()=>new Node(),querySelectorAll:()=>[],querySelector:()=>null}};global.$=id=>nodes[id];global.setInterval=(fn)=>{{global.tick=fn;return 7}};global.clearInterval=()=>{{}};global.setTimeout=(fn)=>{{global.stopTick=fn;return 8}};global.Date={{now:()=>1000}};
 let coachBusy=false,coachTurn=null,coachTurnSerial=0,coachPollTimer=0,coachStopTimer=0,coachVisualTimer=0,coachMessages=[];const COACH_ACTIVITY_COPY={{opening_codex:'Opening Codex',reading_token_meter:'Reading Token Meter',checking_evidence:'Checking the evidence'}},COACH_TOOL_COPY={{usage:'Reading your usage history'}},COACH_PATIENCE_MS=25000;
 function coachAppendMessage(role,content){{nodes['coach-messages'].append(Object.assign(new Node(),{{role,content}}))}}function coachSetBusy(v){{coachBusy=v;nodes['coach-send'].disabled=v}}function coachSetLive(){{}}function coachCurrentRoute(){{return 'sessions'}}
-eval(extract('coachShowStop'));eval(extract('coachClearTurn'));eval(extract('coachRenderActivityNote'));eval(extract('coachActivityStageLabel'));eval(extract('coachResumeVisualTimer'));eval(extract('coachBeginTurn'));eval(extract('coachApplyActivity'));
+eval(extract('coachShowStop'));eval(extract('coachRetireStaleRetry'));eval(extract('coachClearTurn'));eval(extract('coachRenderActivityNote'));eval(extract('coachActivityStageLabel'));eval(extract('coachResumeVisualTimer'));eval(extract('coachBeginTurn'));eval(extract('coachApplyActivity'));
 const id=coachBeginTurn('hello');coachApplyActivity({{stage:'opening_codex',cancellable:true}},id);const activity=nodes['coach-messages'].children.at(-1);
 const stageLabel=activity.children[1].children[0];
 if(coachMessages.length!==1||stageLabel.textContent!=='Opening Codex'||!activity.children[0].className.includes('coachActivityOrbit')||nodes['coach-send'].disabled!==true||nodes['coach-input']?.disabled)throw Error('live-turn contract');
@@ -286,7 +288,7 @@ console.log('live harness ok');
             [
                 "coachSetLive", "coachAppendMessage", "coachSetBusy",
                 "coachShowStop", "coachClearTurn", "coachRenderActivityNote",
-                "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer",
+                "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer",
                 "coachBeginTurn", "coachApplyActivity", "coachPollActivity",
                 "coachResolveTurn", "coachRouteTarget", "coachGoalSummary",
             ],
@@ -307,7 +309,7 @@ console.log('live harness ok');
  fetchQueue.push(response({ok:true,agent:{activity:{stage:'reading_token_meter',tool:'usage',cancellable:true,reads:2}}}));
  await coachPollActivity(turnId);
  if(row.children[1].children[0].textContent!=='Reading your usage history')throw new Error('allowlisted tool did not sharpen the stage copy');
- if(row.children[1].children[1].hidden||!row.children[1].children[1].textContent.includes('2 signals read'))throw new Error('observed evidence reads were not surfaced');
+ if(row.children[1].children[1].hidden||!row.children[1].children[1].textContent.includes('2 Token Meter readings complete'))throw new Error('observed evidence reads were not surfaced');
  if(coachMessages.length!==1)throw new Error('working status leaked into request history');
  coachResolveTurn({message:'Retries are the strongest covered signal.'},turnId);
  if(row.parentNode!==null||coachTurn!==null||coachBusy)throw new Error('terminal success did not clear the live turn');
@@ -326,7 +328,7 @@ console.log('live harness ok');
                 "coachRequestHistory", "coachCurrentRoute", "coachPageContext",
                 "coachActionToken", "coachErrorMessage", "coachSetLive",
                 "coachAppendMessage", "coachSetBusy", "coachShowStop", "coachClearTurn",
-                "coachRenderActivityNote", "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
+                "coachRenderActivityNote", "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
                 "coachResolveTurn", "coachFailTurn", "sendCoachMessage", "coachRouteTarget",
                 "coachGoalSummary",
             ],
@@ -362,7 +364,7 @@ console.log('live harness ok');
                 "coachRequestHistory", "coachCurrentRoute", "coachPageContext",
                 "coachActionToken", "coachErrorMessage", "coachSetLive",
                 "coachAppendMessage", "coachSetBusy", "coachShowStop", "coachClearTurn",
-                "coachRenderActivityNote", "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
+                "coachRenderActivityNote", "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
                 "coachApplyActivity", "coachResolveTurn", "coachStopTurn",
                 "coachRetryTurn", "sendCoachMessage", "coachRouteTarget",
                 "coachGoalSummary",
@@ -407,7 +409,7 @@ console.log('live harness ok');
         output = self.run_coach_node(
             [
                 "coachActionToken", "coachSetLive", "coachAppendMessage", "coachSetBusy", "coachShowStop", "coachClearTurn",
-                "coachRenderActivityNote", "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
+                "coachRenderActivityNote", "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
                 "coachApplyActivity", "coachResolveTurn", "coachStopTurn",
                 "coachRouteTarget", "coachGoalSummary",
             ],
@@ -439,7 +441,7 @@ console.log('live harness ok');
         output = self.run_coach_node(
             [
                 "coachActionToken", "coachSetLive", "coachAppendMessage", "coachSetBusy", "coachShowStop", "coachClearTurn",
-                "coachRenderActivityNote", "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
+                "coachRenderActivityNote", "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
                 "coachApplyActivity", "coachResolveTurn", "coachStopTurn",
                 "coachRouteTarget", "coachGoalSummary",
             ],
@@ -467,9 +469,9 @@ console.log('live harness ok');
                 "coachCurrentRoute", "renderCoachContext", "syncCoachSurfaceMode",
                 "setCoachOpen", "setCoachSheet", "coachFormatSnapshot",
                 "coachGoalSummary", "coachReadinessNotice", "coachRenderNotice",
-                "renderCoachState", "coachSetLive",
+                "coachFocusActiveSurface", "renderCoachState", "coachSetLive",
                 "coachAppendMessage", "coachSetBusy", "coachShowStop", "coachClearTurn",
-                "coachRenderActivityNote", "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
+                "coachRenderActivityNote", "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
                 "coachHandleEscape", "coachRouteTarget",
             ],
             r"""
@@ -498,7 +500,7 @@ console.log('sheet and open state ok');
                 "coachCurrentRoute", "renderCoachContext", "syncCoachSurfaceMode",
                 "coachSetLive", "coachAppendMessage", "coachSetBusy",
                 "coachShowStop", "coachClearTurn", "coachRenderActivityNote",
-                "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer",
+                "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer",
                 "coachBeginTurn", "coachApplyActivity", "coachRouteTarget",
                 "coachGoalSummary",
             ],
@@ -518,23 +520,67 @@ console.log('surface bounds ok');
         self.assertEqual(output, "surface bounds ok")
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
-    def test_compact_reply_bounds_evidence_and_suppresses_navigation_for_goal(self):
+    def test_compact_reply_bounds_evidence_and_labels_the_action_locally(self):
+        # Break caught: agent text becomes a control label, or a goal draft and
+        # an action both compete for the single next step.
         output = self.run_coach_node(
             ["coachRouteTarget", "coachGoalSummary", "coachAppendMessage"],
             r"""
 const evidence=[1,2,3,4].map(value=>({label:`Signal ${value}`,value:String(value)}));
-coachAppendMessage('assistant','Bounded answer',{evidence,navigation:{route:'spend',label:'View Spend'}});
+coachAppendMessage('assistant','Bounded answer',{evidence,action:{kind:'review_skill_packs',subject:'skill-ops@skills-marketplace'}});
 const answer=nodes['coach-messages'].lastElementChild;
 if(answer.querySelectorAll('details').length!==1||answer.querySelectorAll('.coachEvidenceRow').length!==3)throw new Error('evidence was not one collapsed line capped at three');
 if(answer.querySelectorAll('button').length!==1)throw new Error('answer exposed more than one action');
-coachAppendMessage('assistant','Draft answer',{evidence,navigation:{route:'spend',label:'View Spend'},goal_draft:{label:'Lower retries',runtime:'all',target_percent:10,window_days:14,weekly_enabled:false,review_weekday:0}});
+const control=answer.querySelector('.coachAction');
+if(control.querySelector('b').textContent!=='Open skill packs')throw new Error('action label was not generated locally');
+if(!control.className.includes('direct'))throw new Error('a Token Meter control was not marked direct');
+if(control.querySelector('span').textContent!=='skill-ops@skills-marketplace')throw new Error('named subject was dropped');
+coachAppendMessage('assistant','Unknown code',{evidence,action:{kind:'delete_everything',subject:'x'}});
+if(nodes['coach-messages'].lastElementChild.querySelector('.coachAction'))throw new Error('an unknown action code produced a control');
+coachAppendMessage('assistant','Draft answer',{evidence,action:{kind:'compare_models',subject:null},goal_draft:{label:'Lower retries',runtime:'all',target_percent:10,window_days:14,weekly_enabled:false,review_weekday:0}});
 const draft=nodes['coach-messages'].lastElementChild;
-if(draft.querySelectorAll('button').length!==1||draft.querySelector('.coachReplyActions'))throw new Error('goal draft did not suppress navigation');
+if(draft.querySelectorAll('button').length!==1||draft.querySelector('.coachAction'))throw new Error('goal draft did not suppress the action');
 console.log('reply bounds ok');
 """,
             setup="function setHashRoute(){} function activateCoachGoal(){}",
         )
         self.assertEqual(output, "reply bounds ok")
+
+    def test_only_levers_token_meter_operates_are_marked_direct(self):
+        # Break caught: a view-only action is styled as a control, promising a
+        # button that does not exist on that page.
+        block = self.page.split("const COACH_ACTIONS={", 1)[1].split("\n};", 1)[0]
+        direct = {
+            name for name, body in re.findall(r"^\s*([a-z_]+):\{(.*)\},?$", block, re.MULTILINE)
+            if "direct:true" in body
+        }
+        self.assertEqual(direct, {"review_skill_packs", "set_monthly_budget"})
+        for view in ("narrow_tool_output", "compare_models", "reduce_context", "reduce_reasoning"):
+            self.assertNotIn("direct", block.split(f"{view}:{{", 1)[1].split("}", 1)[0])
+        self.assertIn(".coachAction:not(.direct)", self.page)
+
+    def test_skill_ranks_levers_by_whether_the_user_can_change_them(self):
+        skill = Path(
+            meter._SOURCE_ROOT,
+            "token_meter/coach/workspace/.agents/skills/token-meter-coach/SKILL.md",
+        ).read_text(encoding="utf-8")
+        normalized = " ".join(skill.split())
+        for marker in (
+            "Rank by whether the user can actually change it",
+            "**Token Meter changes it.**",
+            "**The user changes their own setup.**",
+            "**Token Meter can only show it.**",
+            "A flagged tool with `actionable` false is never a valid recommendation.",
+        ):
+            self.assertIn(" ".join(marker.split()), normalized)
+
+    def test_every_action_code_maps_to_a_real_route_and_local_label(self):
+        from token_meter.coach.codex import ACTION_KINDS
+
+        block = self.page.split("const COACH_ACTIONS={", 1)[1].split("\n};", 1)[0]
+        self.assertEqual(set(re.findall(r"^\s*([a-z_]+):", block, re.MULTILINE)), set(ACTION_KINDS))
+        for route in re.findall(r"route:'([a-z-]+)'", block):
+            self.assertIn(f"'{route}'", self.page.split("function coachRouteTarget", 1)[1][:400])
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
     def test_visibility_pauses_only_visual_time_and_reduced_motion_is_applied(self):
@@ -542,7 +588,7 @@ console.log('reply bounds ok');
             [
                 "coachSetLive", "coachAppendMessage", "coachSetBusy",
                 "coachShowStop", "coachClearTurn", "coachRenderActivityNote",
-                "coachActivityStageLabel", "coachPauseVisualTimer", "coachResumeVisualTimer",
+                "coachActivityStageLabel", "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer",
                 "coachBeginTurn", "coachHandleVisibilityChange",
                 "syncCoachMotionPreference", "coachRouteTarget", "coachGoalSummary",
             ],
@@ -577,7 +623,7 @@ console.log('visibility and motion ok');
 
     def test_live_turn_contract_is_truthful_and_stale_safe(self):
         for marker in (
-            'function coachBeginTurn(content,retryRow=null)', 'function coachApplyActivity(activity,turnId)',
+            'function coachBeginTurn(content,retryRow=null,history=[])', 'function coachApplyActivity(activity,turnId)',
             'function coachResolveTurn(reply,turnId)', 'function coachStopTurn()',
             "const COACH_ACTIVITY_COPY={", "opening_codex:'Opening Codex'",
             "reading_token_meter:'Reading Token Meter'", "checking_evidence:'Checking the evidence'",
@@ -622,8 +668,9 @@ console.log('visibility and motion ok');
             "const COACH_TOOL_COPY={",
             "usage:'Reading your usage history'",
             "const COACH_PATIENCE_MS=25000",
+            "Token Meter ${turn.activity.reads===1?'reading':'readings'} complete",
             "function coachRenderActivityNote(turn)",
-            "Deeper analysis takes longer. Tok is still working.",
+            "Tok is still working.",
         ):
             self.assertIn(marker, self.page)
 
@@ -684,6 +731,177 @@ console.log('weekly narration ok');
             setup="function setHashRoute(){} function activateCoachGoal(){} function money(v){return '$'+String(v);} function compactNumber(v){return String(v);}",
         )
         self.assertEqual(output, "weekly narration ok")
+
+    def test_activity_tool_copy_matches_the_shared_mcp_allowlist(self):
+        # Break caught: a stage-copy table drifts from the tool allowlist and
+        # silently degrades stages to the generic label.
+        from token_meter.coach.codex import MCP_TOOLS
+        from token_meter.coach.service import _ACTIVITY_TOOLS
+
+        self.assertEqual(_ACTIVITY_TOOLS, frozenset(MCP_TOOLS))
+        block = self.page.split("const COACH_TOOL_COPY={", 1)[1].split("};", 1)[0]
+        copy_keys = set(re.findall(r"^\s*([a-z_]+):", block, re.MULTILINE))
+        self.assertEqual(copy_keys, set(MCP_TOOLS))
+
+    def test_elapsed_note_states_only_time_and_observed_readings(self):
+        # Break caught: an elapsed-time line invents a cause such as "deeper
+        # analysis", which the design forbids because nothing observed it.
+        self.assertNotIn("Deeper analysis", self.page)
+        self.assertNotIn("signals read", self.page)
+        for claim in ("takes longer", "almost done", "should finish", "usually"):
+            self.assertNotIn(claim, self.page.split("coachRenderActivityNote", 1)[1][:600])
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_patience_note_appears_only_after_the_threshold_without_a_boundary(self):
+        output = self.run_coach_node(
+            [
+                "coachSetLive", "coachAppendMessage", "coachSetBusy", "coachShowStop",
+                "coachClearTurn", "coachRenderActivityNote", "coachActivityStageLabel",
+                "coachRetireStaleRetry", "coachPauseVisualTimer", "coachResumeVisualTimer",
+                "coachBeginTurn", "coachRouteTarget", "coachGoalSummary",
+            ],
+            r"""
+const turnId=coachBeginTurn('Wait for the threshold');const note=coachTurn.activity.note;
+advance(24999);coachRenderActivityNote(coachTurn);
+if(!note.hidden)throw new Error('elapsed note appeared before the threshold');
+advance(1);coachRenderActivityNote(coachTurn);
+if(note.hidden||note.textContent!=='Tok is still working.')throw new Error('threshold note wrong: '+note.textContent);
+coachTurn.activity.reads=2;coachRenderActivityNote(coachTurn);
+if(note.textContent!=='2 Token Meter readings complete \u00b7 Tok is still working.')throw new Error('reading count wrong: '+note.textContent);
+if(nodes['coach-activity'].textContent==='Tok is still working.')throw new Error('elapsed note was announced as a stage change');
+console.log('patience note ok');
+""",
+            setup="function coachPollActivity(){} function setHashRoute(){} function activateCoachGoal(){}",
+        )
+        self.assertEqual(output, "patience note ok")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_a_failure_notice_clears_once_fresh_state_disproves_it(self):
+        # Break caught: a bad notice outlives its failure and permanently hides
+        # the missing-Codex prerequisite.
+        output = self.run_coach_node(
+            [
+                "coachErrorMessage", "coachSetLive", "coachReadinessNotice",
+                "coachRenderNotice", "coachStatus", "coachFormatSnapshot",
+                "coachFormatMoment", "coachGoalSummary", "renderCoachState",
+                "coachAnnounceNewWeekly", "loadCoachState", "coachRouteTarget",
+            ],
+            r"""
+(async()=>{
+ fetchQueue.push(response({ok:false,error:'Tok is unavailable.'},false));
+ if(await loadCoachState())throw new Error('a failed load reported success');
+ if(nodes['coach-notice'].hidden||!nodes['coach-notice'].className.includes('bad'))throw new Error('failure was not visible');
+ fetchQueue.push(response({ok:true,agent:{available:true,status:'ready'},goal:null,weekly:{}}));
+ if(!await loadCoachState())throw new Error('a healthy load reported failure');
+ if(!nodes['coach-notice'].hidden)throw new Error('stale failure survived fresh evidence: '+nodes['coach-notice-text'].textContent);
+ fetchQueue.push(response({ok:false,error:'Tok is unavailable.'},false));await loadCoachState();
+ fetchQueue.push(response({ok:true,agent:{available:false,status:'cli_missing'},goal:null,weekly:{}}));await loadCoachState();
+ if(!nodes['coach-notice-text'].textContent.includes('Codex CLI'))throw new Error('a stale failure suppressed the readiness notice');
+ console.log('notice recovery ok');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""",
+            setup="function money(v){return String(v);} function compactNumber(v){return String(v);} function announceCoachWeekly(){} function runCoachWeekly(){}",
+        )
+        self.assertEqual(output, "notice recovery ok")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_retry_survives_later_conversation_and_retires_when_superseded(self):
+        # Break caught: a weekly narration or any later turn silently kills an
+        # enabled Retry button.
+        output = self.run_coach_node(
+            [
+                "coachRequestHistory", "coachCurrentRoute", "coachPageContext",
+                "coachActionToken", "coachErrorMessage", "coachSetLive",
+                "coachAppendMessage", "coachSetBusy", "coachShowStop", "coachClearTurn",
+                "coachRenderActivityNote", "coachActivityStageLabel",
+                "coachRetireStaleRetry", "coachPauseVisualTimer",
+                "coachResumeVisualTimer", "coachBeginTurn", "coachResolveTurn",
+                "coachFailTurn", "coachRetryTurn", "sendCoachMessage",
+                "coachRouteTarget", "coachGoalSummary",
+            ],
+            r"""
+(async()=>{
+ COACH_STATE={actions:{token:'action-token'}};
+ nodes['coach-input'].value='Ask once';
+ fetchQueue.push(()=>Promise.reject(new Error('Tok could not reach the local service.')));
+ await sendCoachMessage();
+ const failed=nodes['coach-messages'].lastElementChild,retry=failed.querySelector('.coachInlineButton');
+ coachMessages.push({role:'assistant',content:'Weekly review for Lower cost per execution: reduce retries.'});
+ fetchQueue.push(response({ok:true,reply:{message:'Recovered answer.'}}));
+ retry.onclick();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ const ask=fetchCalls.find(call=>call.url==='/coach/ask');
+ if(!ask)throw new Error('retry did nothing after a weekly narration');
+ if(JSON.parse(ask.options.body).history.length!==0)throw new Error('retry replayed a polluted history');
+ if(coachMessages.filter(row=>row.content==='Ask once').length!==1)throw new Error('retry duplicated the user message');
+ nodes['coach-input'].value='A later question';
+ fetchQueue.push(()=>Promise.reject(new Error('Tok could not reach the local service.')));
+ await sendCoachMessage();
+ const stale=nodes['coach-messages'].children.find(node=>node!==nodes['coach-messages'].lastElementChild&&node.className==='coachMessage error')?.querySelector('.coachInlineButton');
+ if(stale&&!stale.disabled)throw new Error('a superseded Retry stayed enabled while doing nothing');
+ console.log('retry lifecycle ok');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""",
+            setup="function routedSessionId(){return '';} function setHashRoute(){} function activateCoachGoal(){} function coachPollActivity(){} function loadCoachState(){} function coachStatus(){}",
+        )
+        self.assertEqual(output, "retry lifecycle ok")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_reopening_with_the_goal_sheet_open_focuses_the_visible_surface(self):
+        # Break caught: focus() targets the hidden composer, stranding keyboard
+        # focus outside the panel.
+        output = self.run_coach_node(
+            [
+                "coachCurrentRoute", "renderCoachContext", "syncCoachSurfaceMode",
+                "coachFocusActiveSurface", "setCoachOpen", "setCoachSheet",
+                "coachRouteTarget",
+            ],
+            r"""
+setCoachOpen(true);if(document.activeElement!==nodes['coach-input'])throw new Error('chat open did not focus the composer');
+setCoachSheet('goal',true);setCoachOpen(false);setCoachOpen(true);
+if(document.activeElement===nodes['coach-trigger'])throw new Error('reopening with the sheet open left focus on the trigger');
+if(document.activeElement!==goalButton)throw new Error('reopening did not focus the visible sheet');
+setCoachSheet('chat',true);if(document.activeElement!==nodes['coach-input'])throw new Error('returning to chat did not focus the composer');
+console.log('focus surface ok');
+""",
+            setup="function loadCoachState(){} function renderCoachState(){}",
+        )
+        self.assertEqual(output, "focus surface ok")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required for dashboard JavaScript")
+    def test_an_unconfirmed_cancel_cannot_resurrect_a_turn_that_already_failed(self):
+        # Break caught: a 90s timeout races a Stop press, the failed turn is
+        # marked busy again with no timers left, and the composer wedges until
+        # the page is reloaded.
+        output = self.run_coach_node(
+            [
+                "coachActionToken", "coachSetLive", "coachAppendMessage", "coachSetBusy",
+                "coachShowStop", "coachClearTurn", "coachRenderActivityNote",
+                "coachActivityStageLabel", "coachRetireStaleRetry",
+                "coachPauseVisualTimer", "coachResumeVisualTimer", "coachBeginTurn",
+                "coachApplyActivity", "coachResolveTurn", "coachFailTurn",
+                "coachStopTurn", "coachRetryTurn", "coachRouteTarget", "coachGoalSummary",
+            ],
+            r"""
+(async()=>{
+ COACH_STATE={actions:{token:'action-token'}};
+ const turnId=coachBeginTurn('Race the timeout');coachApplyActivity({stage:'opening_codex',cancellable:true},turnId);
+ advance(8000);
+ const cancel=deferred();fetchQueue.push(()=>cancel.promise);
+ const stopping=coachStopTurn();
+ coachFailTurn('Tok did not finish in time.',turnId);
+ cancel.resolve(response({ok:true,changed:false}));await stopping;
+ if(coachBusy)throw new Error('an unconfirmed cancel re-armed busy on an already-failed turn');
+ if(nodes['coach-send'].hidden||nodes['coach-send'].disabled)throw new Error('the composer stayed unusable');
+ if(!nodes['coach-stop'].hidden)throw new Error('a dead Stop control was left visible');
+ const failed=nodes['coach-messages'].lastElementChild;
+ if(failed.className!=='coachMessage error')throw new Error('the failure row was overwritten');
+ if(intervals.size||timeouts.size)throw new Error('turn timers survived the terminal state');
+ console.log('cancel race ok');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""",
+            setup="function routedSessionId(){return '';} function setHashRoute(){} function activateCoachGoal(){} function coachPollActivity(){} function loadCoachState(){} function coachStatus(){} function sendCoachMessage(){}",
+        )
+        self.assertEqual(output, "cancel race ok")
 
     def test_goal_and_weekly_controls_use_protected_local_routes(self):
         for marker in (

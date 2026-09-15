@@ -214,7 +214,7 @@ desktop layouts reserve room for the panel; 1024-pixel layouts overlay it. The
 same in-memory conversation survives hash-route changes, while a refresh clears
 it. There are no Chat, Goal, or Weekly tabs: one active structured goal appears
 as a rail below the composer and opens a compact detail sheet for progress and
-weekly controls. Agent strings are rendered as text and navigation actions map
+weekly controls. Agent strings are rendered as text and coded actions map
 only to literal existing routes. A submitted turn inserts one transient answer
 line immediately. It projects only `opening_codex`, `reading_token_meter`, and
 `checking_evidence` from observed child/MCP boundaries; the browser supplies the
@@ -282,9 +282,19 @@ allowlisted page context, structured goal, and content-free MCP results may
 enter OpenAI's model context. Raw traces and the prohibited projection fields
 above remain unavailable to the Tok process, and neither conversation text
 nor Codex prose is persisted by Token Meter. The lifecycle projection contains
+The Coach MCP allowlist includes `capabilities`, whose projection also names the
+tools Token Meter has already classified. Only the recommendation codes that
+imply a user-visible change are forwarded, each tool reports whether the user can
+disable it, and every reason is regenerated from the numeric fields because the
+stored `scope` reason embeds a local project path.
+
+The lifecycle projection contains
 only a fixed stage, numeric start time, cancellability, the name of the
-in-progress MCP tool bounded to the shared read-only tool allowlist, and a
-clamped count of completed evidence readings. It never includes model reasoning,
+in-progress MCP tool bounded to the shared read-only tool allowlist that
+`token_meter/coach/service.py` imports from `token_meter/coach/codex.py`, and a
+clamped count of completed evidence readings. The browser turns the tool name
+into fixed local copy and may add one elapsed-time statement that claims no
+cause. It never includes model reasoning,
 JSONL text, tool arguments/results, or provider latency claims. The service
 re-validates the tool name against that allowlist and clamps the count, so an
 unexpected adapter value becomes `null` rather than browser-visible copy.

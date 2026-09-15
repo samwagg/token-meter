@@ -239,6 +239,16 @@ class McpProtocolTests(unittest.TestCase):
                 stats["inputSchema"]["properties"][field]["description"].lower(),
             )
 
+    def test_advertised_stats_metrics_and_dimensions_match_the_resolver_schema(self):
+        # Break caught: the stdio server advertises a metric or dimension the
+        # query service cannot resolve, or omits one it can, so a valid stats
+        # call is rejected or an advertised name never returns evidence.
+        from token_meter.mcp.schema import DIMENSIONS, METRICS
+
+        self.assertEqual(set(server.STATS_METRICS), set(METRICS))
+        self.assertEqual(set(server.STATS_DIMENSIONS), set(DIMENSIONS))
+        self.assertIn("reasoning_tokens", server.STATS_METRICS)
+
     def test_tool_calls_require_initialization(self):
         response, initialized = server.dispatch({
             "jsonrpc": "2.0", "id": 1, "method": "tools/list",

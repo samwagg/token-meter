@@ -82,6 +82,7 @@ TRACE_EVENT_TYPES = [
 
 STATS_METRICS = [
     "session_count", "execution_count", "input_tokens", "output_tokens",
+    "reasoning_tokens",
     "cache_read_tokens", "cache_write_tokens", "cache_write_5m_tokens",
     "cache_write_1h_tokens", "cache_write_unspecified_tokens", "total_tokens",
     "cost_usd",
@@ -138,9 +139,11 @@ TOOLS = [
         "name": "capabilities",
         "title": "Review optional capabilities",
         "description": (
-            "Review named user-installed skill packs with bounded usage evidence. "
-            "Never returns environment variables, credentials, config values, tool arguments, or tool results, "
-            "and cannot change configuration."
+            "Review named user-installed skill packs and the tools Token Meter has already flagged, "
+            "with bounded usage evidence and the reason each was flagged. Each flagged tool says whether the "
+            "user can disable it. "
+            "Never returns environment variables, credentials, config values, project paths, tool arguments, "
+            "or tool results, and cannot change configuration."
         ),
         "inputSchema": {
             "type": "object",

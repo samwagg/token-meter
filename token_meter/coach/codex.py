@@ -15,14 +15,31 @@ from .contracts import GOAL_METRICS, GOAL_RUNTIMES, RECOMMENDATIONS, normalize_g
 
 MAX_MESSAGE_CHARS = 2_000
 MAX_HISTORY_TURNS = 6
-MAX_EVENTS_BYTES = 65_536
+MAX_EVENTS_BYTES = 262_144
 MAX_RESULT_BYTES = 32_768
-COACH_TIMEOUT_SECONDS = 90
+COACH_TIMEOUT_SECONDS = 240
 ROUTES = {
     "sessions", "sessions-all", "spend", "models", "efficiency", "git",
     "learn", "capabilities", "settings", "settings-budgets", "settings-updates",
 }
-MCP_TOOLS = ["check", "usage", "sessions", "stats", "schema", "goal"]
+MCP_TOOLS = [
+    "check", "usage", "sessions", "stats", "schema", "goal", "capabilities",
+]
+# Each action names a control the user can actually operate in Token Meter. The
+# browser generates every label and route from these codes, so agent text never
+# becomes a control.
+ACTION_KINDS = [
+    "review_skill_packs",
+    "review_flagged_tool",
+    "narrow_tool_output",
+    "compare_models",
+    "reduce_context",
+    "reduce_reasoning",
+    "reduce_retries",
+    "set_monthly_budget",
+    "review_costly_sessions",
+    "inspect_current_run",
+]
 DISABLED_CODEX_FEATURES = [
     "apps",
     "browser_use",
@@ -65,18 +82,23 @@ def _evidence_schema():
 CHAT_SCHEMA = {
     "type": "object",
     "properties": {
-        "message": {"type": "string", "minLength": 1, "maxLength": 4_000},
+        "message": {"type": "string", "minLength": 1, "maxLength": 700},
         "evidence": _evidence_schema(),
-        "navigation": {
+        "action": {
             "anyOf": [
                 {"type": "null"},
                 {
                     "type": "object",
                     "properties": {
-                        "route": {"type": "string", "enum": sorted(ROUTES)},
-                        "label": {"type": "string", "maxLength": 80},
+                        "kind": {"type": "string", "enum": sorted(ACTION_KINDS)},
+                        "subject": {
+                            "anyOf": [
+                                {"type": "null"},
+                                {"type": "string", "maxLength": 60},
+                            ],
+                        },
                     },
-                    "required": ["route", "label"],
+                    "required": ["kind", "subject"],
                     "additionalProperties": False,
                 },
             ],
@@ -104,7 +126,7 @@ CHAT_SCHEMA = {
         },
     },
     "required": [
-        "message", "evidence", "navigation", "goal_draft",
+        "message", "evidence", "action", "goal_draft",
     ],
     "additionalProperties": False,
 }
@@ -215,20 +237,24 @@ def _evidence(value):
 
 def _sanitize_chat(value):
     if not isinstance(value, dict) or set(value) != {
-        "message", "evidence", "navigation", "goal_draft",
+        "message", "evidence", "action", "goal_draft",
     }:
         raise CoachRunError("invalid_output")
-    navigation = value.get("navigation")
-    if navigation is not None:
+    action = value.get("action")
+    if action is not None:
         if (
-            not isinstance(navigation, dict)
-            or set(navigation) != {"route", "label"}
-            or navigation.get("route") not in ROUTES
+            not isinstance(action, dict)
+            or set(action) != {"kind", "subject"}
+            or action.get("kind") not in ACTION_KINDS
         ):
             raise CoachRunError("invalid_output")
-        navigation = {
-            "route": navigation["route"],
-            "label": _output_text(navigation.get("label"), 80, True),
+        subject = action.get("subject")
+        action = {
+            "kind": action["kind"],
+            "subject": (
+                _output_text(subject, 60, False) or None
+                if subject is not None else None
+            ),
         }
     draft = value.get("goal_draft")
     if draft is not None:
@@ -241,11 +267,11 @@ def _sanitize_chat(value):
             draft = normalize_goal(draft)
         except ValueError as error:
             raise CoachRunError("invalid_output") from error
-        navigation = None
+        action = None
     return {
-        "message": _output_text(value.get("message"), 4_000, True),
+        "message": _output_text(value.get("message"), 700, True),
         "evidence": _evidence(value.get("evidence")),
-        "navigation": navigation,
+        "action": action,
         "goal_draft": draft,
     }
 

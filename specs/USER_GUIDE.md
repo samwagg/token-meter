@@ -187,10 +187,13 @@ indeterminate indicator, the current stage, and an elapsed timer. The stage
 begins at **Starting Tok**, then changes to **Opening Codex**, the specific
 Token Meter reading in progress such as **Reading your usage history**, or
 **Checking the evidence**—only after that client or run boundary is observed.
-Once a reading finishes, the line also reports how many readings have completed,
-and past roughly twenty-five seconds it says that deeper analysis takes longer
-rather than appearing stuck. Both additions come from observed boundaries; the
-count never runs ahead of real work.
+Once a Token Meter reading finishes, the line reports how many readings have
+completed. That count is incremented only by observed completions, so it never
+runs ahead of real work; it counts read-only Token Meter calls, including the
+metadata calls that inspect which fields exist. Past roughly twenty-five seconds
+the line also states that Tok is still working. That statement is derived from
+elapsed time rather than from a run boundary, so it deliberately claims nothing
+about the cause of the delay.
 
 The elapsed timer is visual only, so assistive technology hears stage changes
 but not timer ticks. Reduced-motion users get a static marker instead of the
@@ -226,6 +229,16 @@ saved weekly result.
 Tok answers with a concise paragraph, one collapsed source line, and at most
 one next action. Expand the source line only when you need its at-most-three
 content-free measurements; it is not a raw trace or a separate evidence table.
+
+Tok answers with something you can change. It names a specific tool, model,
+skill pack, session, or setting rather than telling you where your usage is
+concentrated, and the next action opens the Token Meter control that changes it.
+It reuses the same review that Tools & Skills performs, so it can say which MCP
+server is returning the most output or failing most of its calls, and it prefers
+levers you can operate over ones it can only show you.
+Token Meter generates every action label and destination locally from a fixed
+list, so Tok cannot invent a control or send you off the dashboard. When the
+evidence supports no change, Tok says so and offers no action.
 
 Tok runs the local Codex CLI ephemerally with only the bundled Tok skill and
 allowlisted read-only `tokenmeter` MCP tools. General shell, file, browser, app,

@@ -727,7 +727,7 @@ class CodexCoachTests(unittest.TestCase):
             "stderr": "",
             "result": json.dumps({
                 "message": "A bounded response.", "evidence": [],
-                "navigation": None, "goal_draft": None,
+                "action": None, "goal_draft": None,
             }),
         }
 
@@ -986,7 +986,7 @@ class CodexCoachTests(unittest.TestCase):
         self.assertEqual(a_result, ["cancelled"])
         self.assertEqual(b_result, [{
             "message": "A bounded response.", "evidence": [],
-            "navigation": None, "goal_draft": None,
+            "action": None, "goal_draft": None,
         }])
         self.assertNotIn("activity", coach.status())
 
@@ -1029,7 +1029,7 @@ class CodexCoachTests(unittest.TestCase):
                     test_case.assertTrue(release_finish.wait(2))
                 Path(self.result_path).write_text(json.dumps({
                     "message": "A bounded response.", "evidence": [],
-                    "navigation": None, "goal_draft": None,
+                    "action": None, "goal_draft": None,
                 }))
                 process.returncode = 0
                 return b""
@@ -1313,7 +1313,7 @@ class CodexCoachTests(unittest.TestCase):
                         "label": "Covered cost / execution", "value": "$2.00",
                         "source": "Token Meter MCP",
                     }],
-                    "navigation": {"route": "efficiency", "label": "Open Efficiency"},
+                    "action": {"kind": "reduce_context", "subject": "claude-opus-5"},
                     "goal_draft": None,
                 }),
                 "stderr": "",
@@ -1377,7 +1377,7 @@ class CodexCoachTests(unittest.TestCase):
         self.assertNotIn("SENTINEL-PRIVATE", seen["prompt"])
         self.assertFalse(os.path.exists(seen["cwd"]))
         self.assertFalse(isolated_home.exists())
-        self.assertEqual(result["navigation"]["route"], "efficiency")
+        self.assertEqual(result["action"], {"kind": "reduce_context", "subject": "claude-opus-5"})
 
     def test_coach_bridge_values_stay_in_child_environment_not_command_or_prompt(self):
         from token_meter.coach.codex import CodexCoach
@@ -1387,7 +1387,7 @@ class CodexCoachTests(unittest.TestCase):
             seen.update(command=command, prompt=prompt, **options)
             return {"returncode": 0, "events": "", "stderr": "", "result": json.dumps({
                 "message": "No evidence needed.", "evidence": [],
-                "navigation": None, "goal_draft": None,
+                "action": None, "goal_draft": None,
             })}
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1552,7 +1552,7 @@ class CodexCoachTests(unittest.TestCase):
                 "result": json.dumps({
                     "message": "I drafted a measurable goal.",
                     "evidence": [],
-                    "navigation": None,
+                    "action": None,
                     "goal_draft": {
                         "metric": "retry_rate", "target_percent": 15,
                         "window_days": 14, "runtime": "all", "review_weekday": 4,
@@ -1575,8 +1575,8 @@ class CodexCoachTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "invalid_output")
 
-    def test_chat_card_suppresses_navigation_for_goal_drafts(self):
-        # Break caught: navigation competes with the single optional goal draft
+    def test_chat_card_suppresses_the_action_for_goal_drafts(self):
+        # Break caught: an action competes with the single optional goal draft
         # in Tok's compact card.
         from token_meter.coach.codex import CodexCoach
 
@@ -1594,7 +1594,7 @@ class CodexCoachTests(unittest.TestCase):
                         "label": "Retry rate", "value": "20%",
                         "source": "Token Meter MCP",
                     }],
-                    "navigation": {"route": "efficiency", "label": "Open Efficiency"},
+                    "action": {"kind": "reduce_context", "subject": "claude-opus-5"},
                     "goal_draft": {
                         "metric": "retry_rate", "target_percent": 15,
                         "window_days": 14, "runtime": "all", "review_weekday": 4,
@@ -1611,7 +1611,7 @@ class CodexCoachTests(unittest.TestCase):
             )
             result = coach.run(self.valid_request())
 
-        self.assertIsNone(result["navigation"])
+        self.assertIsNone(result["action"])
         self.assertEqual(result["goal_draft"]["metric"], "retry_rate")
 
     def test_chat_card_rejects_more_than_three_evidence_rows(self):
@@ -1625,7 +1625,7 @@ class CodexCoachTests(unittest.TestCase):
                     "label": "Retry rate", "value": "20%",
                     "source": "Token Meter MCP",
                 }] * 4,
-                "navigation": None,
+                "action": None,
                 "goal_draft": None,
             })
 
@@ -1794,11 +1794,30 @@ class CoachSkillContractTests(unittest.TestCase):
 
         for marker in (
             "# Tok — Master of tokens",
-            "Lead with the strongest evidence-backed signal.",
-            "Explain why it matters, including the material caveat.",
-            "End with one reversible experiment or a direct next step.",
+            "Every answer must name one of those things.",
+            "Why the evidence supports it, including the material caveat.",
+            "What to compare afterwards so the user can tell whether it worked.",
             "Never shame the user, score their productivity, or call usage wasteful.",
             "Use only the `tokenmeter` MCP tools for factual claims about usage.",
+            "An answer that only describes where usage is concentrated is a failed answer",
+            "Never restrict your analysis to the page the user is looking at.",
+            "It is not a filter.",
+            "price several levers before you recommend one",
+            "`flagged_tools` returns the ones it flagged with the reason, a `user_can_disable` flag, and an `actionable` flag",
+            "Prefer a flagged tool where `actionable` is true",
+            "A flagged tool where `actionable` is false is a runtime built-in the user cannot disable, narrow, or reconfigure",
+            "A flagged tool with `actionable` false is never a valid recommendation.",
+            "`reduce_reasoning` when the subject is reasoning effort on a reasoning-capable model",
+            "query `reasoning_tokens` alongside `output_tokens` by `model`",
+            "lowering the reasoning effort or thinking budget is a real lever",
+            "Cite the measured share, name the configuration change in plain words",
+            "Treat `reasoning_tokens` as unavailable, not zero",
+            "prefer a lever that is trending up over one that is already stable",
+            "Comparing two models by average cost per execution is **not** defensible on its own",
+            "say roughly how large it is in dollars or tokens over the window you measured",
+            "`action.subject` may contain only a name a Token Meter MCP response gave you.",
+            "Use `review_skill_packs` only when the subject is a skill pack.",
+            "Use `review_flagged_tool` when the subject is a tool or MCP server",
             "Treat `null`, zero covered rows, and incomplete coverage as unavailable",
         ):
             self.assertIn(" ".join(marker.split()), normalized_skill)
@@ -1861,7 +1880,7 @@ class CoachWeeklyTests(CoachPersistenceTests):
         class Executor(self.Executor):
             def __init__(self):
                 super().__init__(result={
-                    "message": "Answer", "evidence": [], "navigation": None,
+                    "message": "Answer", "evidence": [], "action": None,
                     "goal_draft": None,
                 })
                 self.cancel_results = [
@@ -1900,6 +1919,25 @@ class CoachWeeklyTests(CoachPersistenceTests):
             "stage": "checking_evidence", "started_at": 1.0, "cancellable": True,
             "tool": None, "reads": 99,
         })
+
+    def test_state_survives_an_unhashable_activity_tool_value(self):
+        # Break caught: a non-string tool raises TypeError against the allowlist
+        # set and turns /coach/state into a 500.
+        now = datetime.datetime(2026, 9, 21, 8, tzinfo=datetime.timezone.utc)
+
+        class Executor(self.Executor):
+            def status(self):
+                return {
+                    "available": True, "status": "running",
+                    "activity": {
+                        "stage": "reading_token_meter", "started_at": 1.0,
+                        "cancellable": True, "tool": ["usage"], "reads": None,
+                    },
+                }
+
+        activity = self.service_with_executor(Executor(), now).state()["agent"]["activity"]
+        self.assertIsNone(activity["tool"])
+        self.assertEqual(activity["reads"], 0)
 
     def test_state_forwards_only_an_allowlisted_activity_tool_name(self):
         # Break caught: an arbitrary tool label reaches the browser as stage copy.
@@ -2089,7 +2127,7 @@ class CoachWeeklyTests(CoachPersistenceTests):
         now = datetime.datetime(2026, 9, 21, 8, tzinfo=datetime.timezone.utc)
         executor = self.Executor(result={
             "message": "Answer", "evidence": [],
-            "navigation": None, "goal_draft": None,
+            "action": None, "goal_draft": None,
         })
         service = self.service_with_executor(executor, now)
         service.save_goal(self.goal_value())

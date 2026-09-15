@@ -3,6 +3,7 @@
 import datetime
 import threading
 
+from .codex import MCP_TOOLS
 from .contracts import (
     GOAL_METRICS,
     RECOMMENDATIONS,
@@ -33,7 +34,7 @@ _WEEKLY_ERROR_CODES = {
     "mcp_unavailable", "output_too_large", "timeout",
 }
 EVIDENCE_REFRESH_SECONDS = 15 * 60
-_ACTIVITY_TOOLS = {"check", "usage", "sessions", "stats", "schema", "goal"}
+_ACTIVITY_TOOLS = frozenset(MCP_TOOLS)
 _MAX_ACTIVITY_READS = 99
 
 
@@ -44,7 +45,7 @@ def _activity_evidence_progress(activity):
     if isinstance(reads, bool) or not isinstance(reads, int) or reads < 0:
         reads = 0
     return {
-        "tool": tool if tool in _ACTIVITY_TOOLS else None,
+        "tool": tool if isinstance(tool, str) and tool in _ACTIVITY_TOOLS else None,
         "reads": min(reads, _MAX_ACTIVITY_READS),
     }
 

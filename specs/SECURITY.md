@@ -108,11 +108,17 @@ malformed, oversized, or unavailable bridge response
 falls back once to the existing local read. It never returns the dashboard
 state, raw trace data, event text, or MCP payloads.
 
+The flagged-tool projection names observed tool and MCP-server names with
+bounded counts and a locally generated reason. Token Meter's own diagnostic tools
+are excluded, the `scope` recommendation is dropped entirely, and no stored reason
+string is forwarded, because that string can contain a local project path.
+
 Tok's visible lifecycle is likewise content-free: it can name only fixed
 execution boundaries, the name of the read-only MCP tool currently running, a
 clamped count of completed evidence readings, and a visual elapsed timer. The
-tool name is re-validated against the shared read-only allowlist before it
-reaches the browser, so it can only ever be one of those fixed labels. The
+tool name is re-validated before it reaches the browser against the same
+`MCP_TOOLS` allowlist the stdio interface uses, imported rather than copied, so
+it can only ever be one of those fixed labels. The
 lifecycle never reveals model reasoning, raw JSONL events, tool
 arguments/results, or a provider-latency guarantee. Stop terminates only the
 active ephemeral Coach child and does not target unrelated Codex or MCP

@@ -156,8 +156,9 @@ starts with one content-free live line carrying a spinning indicator, the stage,
 and a visual-only timer. The stage reads **Starting Tok**, then **Opening
 Codex**, the Token Meter reading actually in progress such as **Reading your
 usage history**, or **Checking the evidence**—only when those observed
-boundaries occur. Once evidence has been read the line also counts the completed
-readings, and a longer run says so plainly instead of stalling. After eight
+boundaries occur. Once a Token Meter reading completes the line counts it, and a
+run past roughly twenty-five seconds adds that Tok is still working—an
+elapsed-time statement that claims no cause for the delay. After eight
 seconds the send control becomes **Stop**, which ends only that active Tok turn;
 the sent message remains and the panel offers **Retry**. Provider response time
 is variable, and Tok never exposes model reasoning, raw events, or fabricated

@@ -52,9 +52,12 @@ invocation remain unchanged for compatibility.
   receives DOM text, project names, paths, trace text, or hidden page data.
 - Tok answers with one concise paragraph, one collapsed source line, and at
   most one next action. Evidence is not repeated as a separate table. Expanding
-  the source line reveals at most three content-free measurements. A route
-  action such as `View Spend` is always a user click and is limited to existing
-  Token Meter hash routes.
+  the source line reveals at most three content-free measurements.
+- An answer must name something the user operates, not where usage is
+  concentrated. Codex returns an action code from a fixed list of Token Meter
+  controls plus an optional named subject it read through MCP; the browser
+  generates the label and route locally, so agent text never becomes a control.
+  Following it is always a user click and is limited to existing hash routes.
 - When Tok reads the current route, the corresponding dashboard section may
   receive one restrained cyan focus outline. It is decorative, never required
   to understand the answer, and clears when the turn finishes or the route
@@ -76,9 +79,19 @@ crosses an observed boundary:
 4. `Checking the evidence` after that MCP tool completes;
 5. replacement by the final answer after schema and MCP-evidence validation.
 
-The line uses Tok's existing orbit as a small indeterminate signal. It never
-shows a fake percentage, simulated checklist, model reasoning, raw event text,
-tool arguments, or tool results. `aria-live=polite` announces stage changes but
+Stage 3 names the read-only MCP tool that started, drawn from the shared tool
+allowlist, so `Reading your usage history` replaces the generic label when that
+tool is observed. A secondary line reports the number of observed tool
+completions. Past a fixed elapsed threshold it adds that Tok is still working;
+that one statement is explicitly time-derived rather than boundary-derived and
+must not name a cause, estimate a duration, or imply provider latency.
+
+The line uses a small indeterminate orbit as its motion signal, with a static
+marker under reduced motion. It never shows a fake percentage, simulated
+checklist, model reasoning, raw event text, tool arguments, or tool results.
+Failures are shown, not only announced: an undelivered turn becomes a distinct
+error entry with a retry control, and an unmet local prerequisite becomes a
+notice naming it. `aria-live=polite` announces stage changes but
 not timer ticks; reduced-motion users receive a static state marker.
 
 The textarea stays enabled so the user can draft a follow-up. The send control
@@ -190,11 +203,11 @@ MCP, weakening evidence validation, or promising a provider-response SLA.
 ## Structured responses
 
 Interactive Chat output is ephemeral and contains bounded plain text,
-content-free evidence rows, at most one optional allowlisted navigation action,
-and an optional goal draft. The schema no longer asks Codex to generate a stack
+content-free evidence rows, at most one optional coded action, and an optional
+goal draft. The schema no longer asks Codex to generate a stack
 of suggested prompts. The browser renders with `textContent`; agent output is
 never treated as HTML. When a goal draft is present, its activation control is
-the single next action and any navigation action is suppressed.
+the single next action and any coded action is suppressed.
 
 Weekly output is narrower. The agent chooses one recommendation code from:
 
