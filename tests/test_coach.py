@@ -1631,6 +1631,36 @@ class CodexCoachTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "invalid_output")
 
+    def test_answer_allows_worked_example_length_but_caps_it(self):
+        # Break caught: the message cap drifts between the schema and the
+        # sanitizer, or is too tight to hold a recommendation with a worked
+        # example. The answer may fill MAX_ANSWER_CHARS and no more.
+        from token_meter.coach.codex import (
+            CHAT_SCHEMA, MAX_ANSWER_CHARS, _sanitize_chat, CoachRunError,
+        )
+
+        self.assertEqual(MAX_ANSWER_CHARS, 1_200)
+        self.assertEqual(
+            CHAT_SCHEMA["properties"]["message"]["maxLength"], MAX_ANSWER_CHARS,
+        )
+
+        at_limit = _sanitize_chat({
+            "message": "x" * MAX_ANSWER_CHARS,
+            "evidence": [],
+            "action": None,
+            "goal_draft": None,
+        })
+        self.assertEqual(len(at_limit["message"]), MAX_ANSWER_CHARS)
+
+        with self.assertRaises(CoachRunError) as raised:
+            _sanitize_chat({
+                "message": "x" * (MAX_ANSWER_CHARS + 1),
+                "evidence": [],
+                "action": None,
+                "goal_draft": None,
+            })
+        self.assertEqual(raised.exception.code, "invalid_output")
+
     def test_weekly_requires_observed_token_meter_mcp_use(self):
         from token_meter.coach.codex import CodexCoach, CoachRunError
 
@@ -1818,6 +1848,10 @@ class CoachSkillContractTests(unittest.TestCase):
             "For a cost question, compare the levers in dollars, not raw token counts.",
             "the largest input-token volume is not the largest cost",
             "Total input tokens are also not the context carried per execution",
+            "A concrete worked example of how to apply the change",
+            "never with the user's actual prompts, session titles, project names, or file paths",
+            "For a narrow question that asks for a single number or one fact, answer in one or two sentences",
+            "When a lever has a real worked example, this is the shape",
             "`action.subject` may contain only a name a Token Meter MCP response gave you.",
             "Use `review_skill_packs` only when the subject is a skill pack.",
             "Use `review_flagged_tool` when the subject is a tool or MCP server",

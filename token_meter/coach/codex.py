@@ -14,6 +14,7 @@ from .contracts import GOAL_METRICS, GOAL_RUNTIMES, RECOMMENDATIONS, normalize_g
 
 
 MAX_MESSAGE_CHARS = 2_000
+MAX_ANSWER_CHARS = 1_200
 MAX_HISTORY_TURNS = 6
 MAX_EVENTS_BYTES = 262_144
 MAX_RESULT_BYTES = 32_768
@@ -82,7 +83,7 @@ def _evidence_schema():
 CHAT_SCHEMA = {
     "type": "object",
     "properties": {
-        "message": {"type": "string", "minLength": 1, "maxLength": 700},
+        "message": {"type": "string", "minLength": 1, "maxLength": MAX_ANSWER_CHARS},
         "evidence": _evidence_schema(),
         "action": {
             "anyOf": [
@@ -269,7 +270,7 @@ def _sanitize_chat(value):
             raise CoachRunError("invalid_output") from error
         action = None
     return {
-        "message": _output_text(value.get("message"), 700, True),
+        "message": _output_text(value.get("message"), MAX_ANSWER_CHARS, True),
         "evidence": _evidence(value.get("evidence")),
         "action": action,
         "goal_draft": draft,
