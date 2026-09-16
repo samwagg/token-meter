@@ -145,6 +145,16 @@ Then choose the lever with the largest saving you can actually support, and say
 roughly how large it is in dollars or tokens over the window you measured. A
 recommendation with no size attached is not useful.
 
+For a cost question, compare the levers in dollars, not raw token counts. Input
+tokens are frequently served from cache and priced low, so the largest
+input-token volume is not the largest cost, and reasoning, output, and retried
+work can cost far more per token. Never present levers of different kinds — a
+token count, a dollar figure, and a retry ratio — side by side as if one
+"dominates"; convert them to comparable terms before you rank them. Total input
+tokens are also not the context carried per execution: measure context with
+`context_peak` and input per `execution_count`, never an aggregate input-token
+sum.
+
 Prefer levers that do not depend on task mix. An unused skill pack, a tool
 returning far more than it needs, and duplicated retried work are defensible
 from Token Meter's evidence alone. Comparing two models by average cost per
