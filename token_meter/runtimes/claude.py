@@ -228,18 +228,36 @@ def _cost_coverage_complete(usage, priced):
     )
 
 
-def _unbilled_pseudo_model(model, usage):
+def _zero_usage_synthetic_marker(model, usage):
     """Claude Code records locally generated messages as `<synthetic>`.
 
     They are not model executions, so counting them misreports the session's
     model identity, collapses latest context to zero, and inflates the execution
-    count. Require both the pseudo-model name shape and absent token evidence so
-    a record that does carry billable tokens is still priced.
+    count. Ignore only the exact marker with complete, valid zero-token evidence
+    so malformed, incomplete, or token-bearing records still fail closed.
     """
-    name = str(model or "")
-    if not (name.startswith("<") and name.endswith(">")):
+    if str(model or "") != "<synthetic>" or not isinstance(usage, dict):
         return False
-    return not any(_safe_int(usage.get(field)) for field in USAGE_TOKEN_FIELDS)
+    for field in USAGE_TOKEN_FIELDS:
+        if field not in usage:
+            return False
+        count, reported = normalize_reported_token_count(usage.get(field))
+        if not reported or count != 0:
+            return False
+    return True
+
+
+def _without_zero_usage_synthetic_markers(rows):
+    return tuple(
+        row for row in rows
+        if not (
+            row.get("type") == "assistant"
+            and isinstance(row.get("message"), dict)
+            and _zero_usage_synthetic_marker(
+                row["message"].get("model"), row["message"].get("usage"),
+            )
+        )
+    )
 
 
 def _compact(value, limit=90):
@@ -789,7 +807,7 @@ class ClaudeRuntimeAdapter:
         timestamp_parser = timestamp_parser or _timestamp
         by_id = {}
         order = []
-        for row in rows:
+        for row in _without_zero_usage_synthetic_markers(rows):
             if row.get("type") != "assistant":
                 continue
             message = row.get("message") if isinstance(row.get("message"), dict) else {}
@@ -852,6 +870,7 @@ class ClaudeRuntimeAdapter:
         )
         if not available:
             return self._empty(source, detail, ("source_unavailable",))
+        rows = _without_zero_usage_synthetic_markers(rows)
         messages = self.logical_messages(rows)
         usage_seen = False
         input_complete = True
@@ -997,6 +1016,7 @@ class ClaudeRuntimeAdapter:
         objs, _corrupt, _available = self.load_rows(paths)
         if not objs:
             return None
+        objs = _without_zero_usage_synthetic_markers(objs)
     
         msgs = self.logical_messages(objs, timestamp_parser=parse_iso)
         user_events = claude_user_events(objs)
@@ -1035,8 +1055,6 @@ class ClaudeRuntimeAdapter:
                 _normalized_usage(rec["usage"]), rec["content"]
             )
             if not usage:
-                continue
-            if _unbilled_pseudo_model(rec["model"], usage):
                 continue
             input_complete = input_complete and usage["input_available"]
             output_complete = output_complete and usage["output_available"]
@@ -1260,15 +1278,17 @@ class ClaudeRuntimeAdapter:
                                   "claude", primary_model, approx_cost, executions)
     
         wait_samples = claude_wait_samples(objs)
+        has_executions = bool(executions)
         state = build_state(source, tot, cost, total_tokens, total_cost, series, executions, trace, semantic,
                             analyses, insights, first_ts, last_ts, idle, biggest, side_turns, approx_cost,
                             primary_model, "exact Claude API-rate estimate", execution_timing("claude", objs),
                             wait_samples, availability=metric_availability(
-                                "claude", cost=price_complete,
-                                tokens=input_complete and output_complete,
-                                input_tokens=input_complete,
-                                output_tokens=output_complete,
-                                cache=input_complete,
+                                "claude", cost=has_executions and price_complete,
+                                tokens=(has_executions and input_complete
+                                        and output_complete),
+                                input_tokens=has_executions and input_complete,
+                                output_tokens=has_executions and output_complete,
+                                cache=has_executions and input_complete,
                             ))
         state["throughput"] = performance_summary(claude_performance_samples(objs), tot["output"])
         return state
@@ -1279,6 +1299,7 @@ class ClaudeRuntimeAdapter:
             objs, _corrupt, _available = self.load_rows(
                 source.get("_trace_paths") or (source.get("path") or "",)
             )
+        objs = _without_zero_usage_synthetic_markers(objs)
         CURRENT_SESSION_CONTEXT_SAMPLES = compat["context_sample_limit"]
         add_model_daily = compat["add_model_daily"]
         add_model_summary = compat["add_model_summary"]
@@ -1320,8 +1341,6 @@ class ClaudeRuntimeAdapter:
                 _normalized_usage(rec["usage"]), rec["content"]
             )
             if not usage:
-                continue
-            if _unbilled_pseudo_model(rec["model"], usage):
                 continue
             input_complete = input_complete and usage["input_available"]
             output_complete = output_complete and usage["output_available"]
@@ -1401,15 +1420,17 @@ class ClaudeRuntimeAdapter:
 
         performance = claude_performance_samples(objs)
         wait_samples = claude_wait_samples(objs)
+        has_messages = bool(msgs)
         row = summary_row(source, title, cost, tokens, len(msgs), models, first_ts, last_ts, model_cost, model_tok, day_cost, approx,
                           execution_timing("claude", objs), input_tokens, output_tokens, model_stats,
                           list(model_daily.values()), performance, wait_samples,
                           availability=metric_availability(
-                              "claude", cost=price_complete,
-                              tokens=input_complete and output_complete,
-                              input_tokens=input_complete,
-                              output_tokens=output_complete,
-                              cache=input_complete,
+                              "claude", cost=has_messages and price_complete,
+                              tokens=(has_messages and input_complete
+                                      and output_complete),
+                              input_tokens=has_messages and input_complete,
+                              output_tokens=has_messages and output_complete,
+                              cache=has_messages and input_complete,
                           ),
                           session_name=declared_title)
         row["primary_model"] = primary_model
